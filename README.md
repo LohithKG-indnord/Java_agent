@@ -18,13 +18,16 @@ The application:
 
 - rejects unrelated, unsafe, oversized, and prompt-injection requests before calling Claude;
 - asks Claude for small, complete Java source without explanations;
+- prefers complete, simple examples and avoids unnecessary complexity;
 - removes accidental outer Markdown fences and rejects prose or mixed-language output;
 - checks Java structure and blocks selected process-control APIs;
 - compiles generated code with Java 17 by default;
+- allows complete responses up to configurable generation and repair token budgets;
 - makes one repair attempt when a generated response fails a retryable validation check;
 - logs operational diagnostics without storing API keys or full prompts;
 - shows locally tokenized input and output counts without displaying API cost;
-- reuses the Anthropic client across Streamlit reruns.
+- reuses the Anthropic client across Streamlit reruns;
+- starts tokenizer, client, and enabled local-guardrail warm-up in the background when Streamlit starts.
 
 Generated code is validated but never executed.
 
@@ -98,6 +101,8 @@ streamlit run app.py
 
 The compiler scratch directory configured by `JAVA_GUARDRAIL_TEMP_DIR` is created automatically. Relative paths are resolved from the project directory.
 
+The application starts a non-blocking warm-up thread for the tokenizer, Anthropic client, and enabled local guardrail models. It does not make an API request. If a local model is still loading when the first prompt is submitted, that prompt may still wait for the model to finish loading.
+
 ## Configuration
 
 The main settings are defined in `.env.example`:
@@ -111,6 +116,8 @@ The main settings are defined in `.env.example`:
 | `JAVAC_PATH` | none | Optional explicit path to `javac` |
 | `JAVA_GUARDRAIL_TEMP_DIR` | system temp | Temporary compiler workspace |
 | `TOKENIZER_ENCODING` | `o200k_base` | `tiktoken` encoding used for system, input, and output counters |
+| `MAX_GENERATION_TOKENS` | `4096` | Maximum output tokens for the first generation request |
+| `MAX_REPAIR_TOKENS` | `4096` | Maximum output tokens for a repair request |
 | `ENABLE_LOCAL_MODEL_GUARDRAILS` | `false` | Enable local semantic and injection classifiers |
 | `REQUIRE_LOCAL_MODEL_GUARDRAILS` | `true` | Fail closed if enabled local models cannot load |
 

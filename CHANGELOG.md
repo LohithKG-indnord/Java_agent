@@ -13,6 +13,10 @@ All notable changes to Java Code Agent are documented here.
 - Documented configurable `JAVAC_PATH` and no-administrator compiler setup.
 - Added automatic creation of the configured compiler scratch directory.
 - Added Anthropic client reuse in Streamlit.
+- Added non-blocking startup warm-up for tokenizer, Anthropic client, and enabled local guardrail models.
+- Added explicit concise-output guidance and aligned generation/repair token budgets.
+- Replaced the short output budget with configurable larger generation/repair budgets and added automatic retry for unbalanced delimiters.
+- Updated the system prompt to prefer complete, small, simple Java examples without unnecessary complexity.
 
 ## 01-10-2026
 

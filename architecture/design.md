@@ -55,7 +55,9 @@ The models are cached in process. `REQUIRE_LOCAL_MODEL_GUARDRAILS=true` makes mo
 
 ### Claude integration
 
-`ask_claude()` reuses a cached Anthropic client and sends the question with a strict system prompt. The default model is configured by `ANTHROPIC_MODEL` and currently defaults to `claude-sonnet-4-6`. The request uses temperature `0` and asks for complete Java source without explanations or Markdown.
+`ask_claude()` reuses a cached Anthropic client and sends the question with a strict system prompt. The default model is configured by `ANTHROPIC_MODEL` and currently defaults to `claude-sonnet-4-6`. The request uses temperature `0` and asks for complete, small, simple Java source without explanations or Markdown. Generation and repair budgets default to 4,096 tokens and can be changed with `MAX_GENERATION_TOKENS` and `MAX_REPAIR_TOKENS`; the prompt explicitly prohibits truncating incomplete source.
+
+At Streamlit startup, a cached background thread warms the tokenizer, Anthropic client, and enabled local guardrail models. The warm-up makes no API request and does not block the UI; a first request can still wait if a large local model has not finished loading.
 
 ### Output guardrail
 

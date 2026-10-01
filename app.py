@@ -18,6 +18,7 @@ import shutil
 import stat
 import subprocess
 import tempfile
+import threading
 import time
 import unicodedata
 from dataclasses import dataclass
@@ -27,6 +28,7 @@ from typing import Optional
 
 from anthropic import Anthropic
 from dotenv import load_dotenv
+import streamlit as st
 
 load_dotenv()
 
@@ -57,6 +59,8 @@ REQUIRE_JAVAC = os.getenv("REQUIRE_JAVAC", "true").lower() not in {"0", "false",
 ENABLE_LOCAL_MODEL_GUARDRAILS = os.getenv("ENABLE_LOCAL_MODEL_GUARDRAILS", "false").lower() in {"1", "true", "yes"}
 REQUIRE_LOCAL_MODEL_GUARDRAILS = os.getenv("REQUIRE_LOCAL_MODEL_GUARDRAILS", "true").lower() not in {"0", "false", "no"}
 TOKENIZER_ENCODING = os.getenv("TOKENIZER_ENCODING", "o200k_base").strip() or "o200k_base"
+MAX_GENERATION_TOKENS = int(os.getenv("MAX_GENERATION_TOKENS", "4096"))
+MAX_REPAIR_TOKENS = int(os.getenv("MAX_REPAIR_TOKENS", "4096"))
 
 
 class LatencyTracker:
@@ -106,9 +110,15 @@ written directly to a `.java` file. Use one public top-level type at most, and
 make the file-compatible public type name clear from the source. If a complete
 program is requested, include a main method. If a reusable class or interface is
 requested, provide a complete declaration that compiles on its own when possible.
+Use as many output tokens as the requested complete solution requires. Never
+truncate, abbreviate, or stop in the middle of a class, method, string, comment,
+statement, delimiter pair, or code block to save tokens. Return the entire source
+file, even when the solution is large.
 
 REQUEST INTERPRETATION
-Understand the user’s request and implement the smallest useful solution. For a
+Understand the user’s request and implement a complete, small, easy-to-understand
+solution. Prefer the simplest code that fully answers the request; do not
+over-engineer it or add unnecessary architecture. For a
 topic-only request such as inheritance, polymorphism, quicksort, recursion,
 multithreading, schema verification, or endpoint, infer a simple Java example.
 For an ambiguous but safe request, choose a reasonable Java 17 assumption instead
@@ -627,9 +637,41 @@ def get_anthropic_client(api_key: str) -> Anthropic:
     return Anthropic(api_key=api_key)
 
 
+def _warmup_resources() -> None:
+    """Warm local resources in the background without making an API request."""
+    try:
+        count_tokens(SYSTEM_PROMPT)
+    except Exception as error:
+        log_event("warmup_failed", resource="tokenizer", error_type=type(error).__name__)
+
+    api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+    if api_key:
+        try:
+            get_anthropic_client(api_key)
+        except Exception as error:
+            log_event("warmup_failed", resource="anthropic_client", error_type=type(error).__name__)
+
+    if ENABLE_LOCAL_MODEL_GUARDRAILS:
+        try:
+            from local_guardrails import _load_prompt_guard, _load_semantic_model
+
+            _load_prompt_guard()
+            _load_semantic_model()
+        except Exception as error:
+            # The normal request path still applies REQUIRE_LOCAL_MODEL_GUARDRAILS.
+            log_event("warmup_failed", resource="local_guardrails", error_type=type(error).__name__)
+
+
+@st.cache_resource(show_spinner=False)
+def start_background_warmup() -> bool:
+    """Start one process-level warm-up thread and return immediately."""
+    threading.Thread(target=_warmup_resources, name="java-agent-warmup", daemon=True).start()
+    return True
+
+
 def ask_claude(
     question: str,
-    max_tokens: int = 1_200,
+    max_tokens: int = MAX_GENERATION_TOKENS,
     latency: Optional[LatencyTracker] = None,
     latency_name: str = "claude_api_call",
 ) -> str:
@@ -691,6 +733,7 @@ def generate_valid_java(
         "javac rejected the generated code:",
         "The model returned explanation text instead of Java code.",
         "The response did not contain a Java type.",
+        "The generated Java code has unbalanced delimiters.",
     )
     if source is not None or not any(diagnostic.startswith(item) for item in retryable_diagnostics):
         return source, diagnostic
@@ -705,7 +748,7 @@ def generate_valid_java(
     )
     repaired_raw = ask_claude(
         repair_request,
-        max_tokens=1_600,
+        max_tokens=MAX_REPAIR_TOKENS,
         latency=latency,
         latency_name="claude_repair_api_call",
     )
@@ -719,9 +762,8 @@ def generate_valid_java(
 
 
 def main() -> None:
-    import streamlit as st
-
     st.set_page_config(page_title="Java Code Agent", page_icon="☕", layout="centered")
+    start_background_warmup()
     st.title("☕ Java Code Agent")
     st.caption("Ask a Java programming question. Accepted answers are returned as Java source code only.")
 

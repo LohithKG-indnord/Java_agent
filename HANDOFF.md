@@ -52,6 +52,8 @@ For a production-like run, keep `REQUIRE_JAVAC=true`. The tests use `REQUIRE_JAV
 - `ANTHROPIC_API_KEY` is required unless the application is only being tested through guardrail functions.
 - `REQUIRE_JAVAC=true` is the safe default; `REQUIRE_JAVAC=false` is intended only for local experimentation.
 - `TOKENIZER_ENCODING=o200k_base` controls the local `tiktoken` encoding used for system, input, and output token counters.
+- `MAX_GENERATION_TOKENS` and `MAX_REPAIR_TOKENS` default to `4096`; increase or decrease them in `.env` as needed. The system prompt tells Claude not to truncate incomplete Java source.
+- Streamlit starts tokenizer, Anthropic-client, and enabled local-model warm-up in a background thread; it makes no API request.
 - Local model guardrails are enabled with `ENABLE_LOCAL_MODEL_GUARDRAILS=true` and fail closed by default when required models are unavailable.
 - The first local-model run may download model files and require additional disk space and startup time.
 - `agent.log` contains operational diagnostics, while `latency_metrics.json` contains the latest timing report.
