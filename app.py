@@ -21,6 +21,7 @@ import tempfile
 import time
 import unicodedata
 from dataclasses import dataclass
+from functools import lru_cache
 from logging.handlers import RotatingFileHandler
 from typing import Optional
 
@@ -55,6 +56,7 @@ JAVA_RELEASE = os.getenv("JAVA_RELEASE", "17")
 REQUIRE_JAVAC = os.getenv("REQUIRE_JAVAC", "true").lower() not in {"0", "false", "no"}
 ENABLE_LOCAL_MODEL_GUARDRAILS = os.getenv("ENABLE_LOCAL_MODEL_GUARDRAILS", "false").lower() in {"1", "true", "yes"}
 REQUIRE_LOCAL_MODEL_GUARDRAILS = os.getenv("REQUIRE_LOCAL_MODEL_GUARDRAILS", "true").lower() not in {"0", "false", "no"}
+TOKENIZER_ENCODING = os.getenv("TOKENIZER_ENCODING", "o200k_base").strip() or "o200k_base"
 
 
 class LatencyTracker:
@@ -72,6 +74,19 @@ class LatencyTracker:
             "total_seconds": round(time.perf_counter() - self.started_at, 4),
             "sections_seconds": self.sections,
         }
+
+
+@lru_cache(maxsize=4)
+def get_tokenizer(encoding_name: str):
+    """Load the configured local tokenizer once per encoding."""
+    import tiktoken
+
+    return tiktoken.get_encoding(encoding_name)
+
+
+def count_tokens(text: str) -> int:
+    """Count tokens locally using the configured tiktoken encoding."""
+    return len(get_tokenizer(TOKENIZER_ENCODING).encode(text, disallowed_special=()))
 
 
 def write_latency_report(tracker: LatencyTracker) -> None:
@@ -529,8 +544,12 @@ def compile_java(source: str, latency: Optional[LatencyTracker] = None) -> tuple
     # Keep compiler scratch files outside the project directory.  This avoids
     # OneDrive sync/locking issues while preserving an explicit override for
     # deployments that need a dedicated temporary location.
-    temp_root = os.getenv("JAVA_GUARDRAIL_TEMP_DIR", tempfile.gettempdir())
+    configured_temp_root = os.getenv("JAVA_GUARDRAIL_TEMP_DIR", "").strip()
+    temp_root = configured_temp_root or tempfile.gettempdir()
+    if not os.path.isabs(temp_root):
+        temp_root = os.path.join(os.path.dirname(__file__), temp_root)
     try:
+        os.makedirs(temp_root, exist_ok=True)
         folder = tempfile.mkdtemp(prefix=".java_guardrail_", dir=temp_root)
     except OSError:
         return False, "Compiler validation could not create its temporary folder. Check project-folder permissions."
@@ -602,6 +621,12 @@ def output_guardrail(
     return source, diagnostic
 
 
+@lru_cache(maxsize=2)
+def get_anthropic_client(api_key: str) -> Anthropic:
+    """Reuse the API client across Streamlit reruns for this credential."""
+    return Anthropic(api_key=api_key)
+
+
 def ask_claude(
     question: str,
     max_tokens: int = 1_200,
@@ -621,7 +646,7 @@ def ask_claude(
             "ANTHROPIC_API_KEY is missing. Add it to a .env file, Streamlit secrets, "
             "or your terminal environment before starting Streamlit."
         )
-    client = Anthropic(api_key=api_key)
+    client = get_anthropic_client(api_key)
     started_at = time.perf_counter()
     try:
         message = client.messages.create(
@@ -653,7 +678,8 @@ def ask_claude(
 
 
 def generate_valid_java(
-    question: str, latency: Optional[LatencyTracker] = None
+    question: str,
+    latency: Optional[LatencyTracker] = None,
 ) -> tuple[Optional[str], str]:
     """Generate Java and repair only genuine javac failures."""
     raw = ask_claude(question, latency=latency)
@@ -701,6 +727,14 @@ def main() -> None:
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
+    if "token_counts" not in st.session_state:
+        st.session_state.token_counts = {"input_tokens": 0, "output_tokens": 0}
+
+    with st.sidebar:
+        st.metric("System prompt tokens", f"{count_tokens(SYSTEM_PROMPT):,}")
+        st.metric("Input tokens", f"{st.session_state.token_counts['input_tokens']:,}")
+        st.metric("Output tokens", f"{st.session_state.token_counts['output_tokens']:,}")
+
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             if message["role"] == "assistant":
@@ -711,6 +745,7 @@ def main() -> None:
     question = st.chat_input("Write your prompt here ...")
     if not question:
         return
+
     log_event("request_received", question_length=len(question))
     st.session_state.messages.append({"role": "user", "content": question})
     with st.chat_message("user"):
@@ -738,7 +773,13 @@ def main() -> None:
         loader = st.empty()
         loader.markdown(GENERATION_LOADER_HTML, unsafe_allow_html=True)
         try:
-            source, diagnostic = generate_valid_java(question, latency=latency)
+            source, diagnostic = generate_valid_java(
+                question, latency=latency
+            )
+            st.session_state.token_counts = {
+                "input_tokens": count_tokens(question),
+                "output_tokens": count_tokens(source or ""),
+            }
         except Exception as error:  # Show safe, actionable UI error without exposing secrets.
             loader.empty()
             log_event(
@@ -759,9 +800,15 @@ def main() -> None:
         st.code(source, language="java")
         with st.expander("Validation"):
             st.caption(diagnostic)
+            st.caption("Stage timings")
+            for stage, seconds in latency.report()["sections_seconds"].items():
+                st.caption(f"{stage}: {seconds:.3f}s")
         st.session_state.messages.append({"role": "assistant", "content": source})
         log_event("generation_succeeded", source_length=len(source), latency=latency.report())
         write_latency_report(latency)
+        # The sidebar rendered before generation started; redraw it with the
+        # token counts calculated for this prompt and response.
+        st.rerun()
 
 
 if __name__ == "__main__":

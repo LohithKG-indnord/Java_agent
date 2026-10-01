@@ -28,7 +28,13 @@ Copy-Item .env.example .env
 streamlit run app.py
 ```
 
-Install JDK 17 or newer and ensure `javac` is available on `PATH`. A portable compiler can be selected with `JAVAC_PATH`.
+Install or obtain access to JDK 17 or newer and ensure `javac` is available on `PATH`. If administrator access is unavailable, use an existing organization/IDE/mentor JDK or a portable JDK folder accessible to the current user, then set its compiler explicitly:
+
+```env
+JAVAC_PATH=C:\path\to\jdk-17\bin\javac.exe
+```
+
+For local experimentation without compiler access, set `REQUIRE_JAVAC=false`. The app automatically creates the configured `JAVA_GUARDRAIL_TEMP_DIR`; relative paths are resolved from the repository root.
 
 ## Verify locally
 
@@ -45,6 +51,7 @@ For a production-like run, keep `REQUIRE_JAVAC=true`. The tests use `REQUIRE_JAV
 - `.env` is ignored and must never be committed.
 - `ANTHROPIC_API_KEY` is required unless the application is only being tested through guardrail functions.
 - `REQUIRE_JAVAC=true` is the safe default; `REQUIRE_JAVAC=false` is intended only for local experimentation.
+- `TOKENIZER_ENCODING=o200k_base` controls the local `tiktoken` encoding used for system, input, and output token counters.
 - Local model guardrails are enabled with `ENABLE_LOCAL_MODEL_GUARDRAILS=true` and fail closed by default when required models are unavailable.
 - The first local-model run may download model files and require additional disk space and startup time.
 - `agent.log` contains operational diagnostics, while `latency_metrics.json` contains the latest timing report.
@@ -65,10 +72,6 @@ For a production-like run, keep `REQUIRE_JAVAC=true`. The tests use `REQUIRE_JAV
 3. Add rate limiting, authentication, and deployment secrets management before shared or public deployment.
 4. Add a sandboxed execution service only if a future requirement needs runtime output.
 5. Review the blocked API policy and expand it with an explicit allowlist or static analysis tool.
-
-## Next planned change
-
-- Add a tokenizer/token-usage label to the Streamlit interface so users can see request and response token usage.
 
 ## Documentation map
 

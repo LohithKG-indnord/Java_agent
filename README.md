@@ -22,18 +22,22 @@ The application:
 - checks Java structure and blocks selected process-control APIs;
 - compiles generated code with Java 17 by default;
 - makes one repair attempt when a generated response fails a retryable validation check;
-- logs operational diagnostics without storing API keys or full prompts.
+- logs operational diagnostics without storing API keys or full prompts;
+- shows locally tokenized input and output counts without displaying API cost;
+- reuses the Anthropic client across Streamlit reruns.
 
 Generated code is validated but never executed.
 
 ## Requirements
 
 - Python 3.10 or newer
-- JDK 17 or newer with `javac` on `PATH`
+- JDK 17 or newer with `javac` on `PATH`, or a configured `JAVAC_PATH`
 - Anthropic API key
 - Windows PowerShell, macOS/Linux shell, or an equivalent Python environment
 
-## Run locally
+## Installation
+
+### 1. Create and activate a virtual environment
 
 ```powershell
 python -m venv .venv
@@ -42,13 +46,57 @@ pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-Edit `.env` and set `ANTHROPIC_API_KEY`, then start the app:
+On macOS/Linux:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+```
+
+### 2. Configure the Anthropic key
+
+Edit `.env` and set `ANTHROPIC_API_KEY`.
+
+### 3. Configure Java compilation
+
+The default is strict compiler validation:
+
+```env
+REQUIRE_JAVAC=true
+JAVA_RELEASE=17
+```
+
+Check whether Java is already available:
+
+```powershell
+javac -version
+```
+
+If `javac` is installed but not on `PATH`, set its full path in `.env` without needing administrator access:
+
+```env
+JAVAC_PATH=C:\path\to\jdk-17\bin\javac.exe
+```
+
+If you cannot install a JDK because you do not have administrator access, use an existing JDK supplied by your organization, IDE, or mentor, provided its folder is accessible to your account. Ask for the full path to `javac.exe` and set `JAVAC_PATH`.
+
+For local experimentation only, you can run without a compiler:
+
+```env
+REQUIRE_JAVAC=false
+```
+
+In this mode the application performs structural validation only and should not be treated as production-like Java verification.
+
+### 4. Start the app
 
 ```powershell
 streamlit run app.py
 ```
 
-For macOS/Linux, activate the environment with `source .venv/bin/activate` and copy the environment file with `cp .env.example .env`.
+The compiler scratch directory configured by `JAVA_GUARDRAIL_TEMP_DIR` is created automatically. Relative paths are resolved from the project directory.
 
 ## Configuration
 
@@ -62,10 +110,13 @@ The main settings are defined in `.env.example`:
 | `REQUIRE_JAVAC` | `true` | Reject output when compiler validation is unavailable |
 | `JAVAC_PATH` | none | Optional explicit path to `javac` |
 | `JAVA_GUARDRAIL_TEMP_DIR` | system temp | Temporary compiler workspace |
+| `TOKENIZER_ENCODING` | `o200k_base` | `tiktoken` encoding used for system, input, and output counters |
 | `ENABLE_LOCAL_MODEL_GUARDRAILS` | `false` | Enable local semantic and injection classifiers |
 | `REQUIRE_LOCAL_MODEL_GUARDRAILS` | `true` | Fail closed if enabled local models cannot load |
 
 Set `REQUIRE_JAVAC=false` only for local experimentation without a JDK. In that mode the app falls back to structural validation and should not be treated as production-like validation.
+
+The sidebar displays only the system-prompt, latest user-prompt, and response token counts. Tokenization uses `tiktoken` and defaults to `o200k_base`; set `TOKENIZER_ENCODING` in `.env` to change the encoding. These are local tokenizer counts, not provider billing totals. No API-cost estimate is displayed.
 
 ## Tests
 

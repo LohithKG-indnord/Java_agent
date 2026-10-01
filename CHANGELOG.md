@@ -2,7 +2,21 @@
 
 All notable changes to Java Code Agent are documented here.
 
-## 2026-10-01
+## 01-10-2026
+
+**commit:** `feat: add tokenizer metrics and improve javac configuration`
+
+### Changed
+
+- Added configurable local tokenization with `tiktoken`, using `o200k_base` by default.
+- Added separate system-prompt token display alongside the latest input and output counts.
+- Documented configurable `JAVAC_PATH` and no-administrator compiler setup.
+- Added automatic creation of the configured compiler scratch directory.
+- Added Anthropic client reuse in Streamlit.
+
+## 01-10-2026
+
+**commit:** `feat: add Java code agent with guardrails`
 
 ### Added
 

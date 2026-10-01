@@ -27,7 +27,9 @@ javaagentcodex/
 
 ### Streamlit UI
 
-`main()` configures the page, renders the conversation history, accepts a chat input, and displays validated Java source with Java syntax highlighting.
+`main()` configures the page, renders the conversation history, accepts a chat input, and displays validated Java source with Java syntax highlighting. The sidebar shows only system-prompt, latest input, and latest output token counts. It does not display API cost, cache usage, or request totals.
+
+Token counts use `tiktoken` and the `TOKENIZER_ENCODING` environment setting, defaulting to `o200k_base`. The system prompt is counted separately from the user input. These local counts are intended for visibility and are not provider billing measurements.
 
 ### Deterministic input guardrail
 
@@ -53,7 +55,7 @@ The models are cached in process. `REQUIRE_LOCAL_MODEL_GUARDRAILS=true` makes mo
 
 ### Claude integration
 
-`ask_claude()` creates an Anthropic client and sends the question with a strict system prompt. The default model is configured by `ANTHROPIC_MODEL` and currently defaults to `claude-sonnet-4-6`. The request uses temperature `0` and asks for complete Java source without explanations or Markdown.
+`ask_claude()` reuses a cached Anthropic client and sends the question with a strict system prompt. The default model is configured by `ANTHROPIC_MODEL` and currently defaults to `claude-sonnet-4-6`. The request uses temperature `0` and asks for complete Java source without explanations or Markdown.
 
 ### Output guardrail
 
@@ -67,7 +69,7 @@ The models are cached in process. `REQUIRE_LOCAL_MODEL_GUARDRAILS=true` makes mo
 6. selected process-control APIs are blocked;
 7. the source is compiled with `javac` using the configured Java release.
 
-Compiler files are written to a temporary directory and deleted after validation. The generated source is never executed.
+Compiler files are written to a temporary directory and deleted after validation. If `JAVA_GUARDRAIL_TEMP_DIR` is configured, the directory is created automatically; relative paths are resolved from the project directory. The generated source is never executed.
 
 ### Repair path
 
@@ -83,6 +85,7 @@ Compiler files are written to a temporary directory and deleted after validation
 | `REQUIRE_JAVAC` | `true` | Fail closed when compiler validation is unavailable |
 | `JAVAC_PATH` | none | Optional explicit compiler path |
 | `JAVA_GUARDRAIL_TEMP_DIR` | system temp | Compiler scratch directory |
+| `TOKENIZER_ENCODING` | `o200k_base` | `tiktoken` encoding for visible token counters |
 | `ENABLE_LOCAL_MODEL_GUARDRAILS` | `false` | Enable local model checks |
 | `REQUIRE_LOCAL_MODEL_GUARDRAILS` | `true` | Reject if enabled local models cannot run |
 | `JAVA_SCOPE_MIN_SCORE` | `0.55` | Minimum semantic Java similarity |
@@ -118,4 +121,5 @@ Tests set `REQUIRE_JAVAC=false` by default so they can run without a local JDK. 
 - Claude is the only remote model call in the default path.
 - Generated code is validated but never executed.
 - API keys and `.env` files remain local and are excluded from version control.
-- The default compiler requirement means a JDK 17+ installation is part of the runtime prerequisite.
+- The default compiler requirement means an accessible JDK 17+ installation, or an explicit `JAVAC_PATH`, is part of the runtime prerequisite.
+- `REQUIRE_JAVAC=false` is available for local experimentation when compiler access is unavailable.

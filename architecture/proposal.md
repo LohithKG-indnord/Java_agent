@@ -26,6 +26,7 @@ This project addresses those risks with a narrow request contract and a fail-clo
 - Require Java 17-compatible compilation by default.
 - Preserve useful diagnostics without logging API keys, full prompts, or generated source.
 - Record request-stage latency for operational analysis.
+- Show separate local token counts for the system prompt, user prompt, and generated response without exposing API cost.
 - Support stronger local semantic and prompt-injection checks when configured.
 
 ## 4. Non-goals
@@ -63,7 +64,7 @@ flowchart TD
 
 The input path rejects empty or oversized requests, obvious non-Java requests, prompt-injection patterns, unsafe credential-theft/malware requests, and unsupported control characters. The output path removes a complete Markdown fence, rejects prose and non-Java fragments, checks delimiters, blocks selected process-control APIs, and compiles the source in a temporary directory.
 
-The application never executes the generated class. Compiler scratch files are cleaned up after validation. Local model guardrails are optional at the architecture level but can be made mandatory with `REQUIRE_LOCAL_MODEL_GUARDRAILS=true`; if required models are unavailable, the request fails closed.
+The application never executes the generated class. Compiler scratch files are cleaned up after validation, and a configured scratch directory is created automatically. Local model guardrails are optional at the architecture level but can be made mandatory with `REQUIRE_LOCAL_MODEL_GUARDRAILS=true`; if required models are unavailable, the request fails closed. Token counters use a configurable local `tiktoken` encoding and do not claim to represent provider billing totals.
 
 ## 7. Expected outcome
 
@@ -77,3 +78,4 @@ The project should provide a small, reproducible Java assistant with a clear ope
 - Add stronger Java policy checks using an allowlist of permitted APIs.
 - Add a sandboxed compile service if generated code must be executed in a future product.
 - Separate UI, orchestration, guardrails, and provider integration into modules as the codebase grows.
+- Add a setup diagnostic that reports whether the configured `JAVAC_PATH` is accessible before a request is submitted.
