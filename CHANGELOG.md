@@ -1,6 +1,34 @@
 # Changelog
 
-All notable changes to Java Code Agent are documented here.
+All notable changes to the Java and Node.js Code Agent are documented here.
+
+## 13-10-2026
+
+**Changed**
+
+- Added a Java/Node.js language selector and routing layer.
+- Split language-specific generation and validation into the `agents/` package.
+- Added Node.js syntax validation with `node --check` and Node/npm configuration.
+- Added shared compiler helpers and updated project documentation, requirements, and ignore rules.
+
+## 13-10-2026
+
+**commit:** `feat: created a agent common file`
+
+### Added
+
+- Created a agent common file which consist of all the functions that is used by both java and node agent
+
+## 01-10-2026
+
+**commit:** `feat: improve Java generation reliability and performance`
+
+### Changed
+
+- Added non-blocking startup warm-up for tokenizer, Anthropic client, and enabled local guardrail models.
+- Added explicit concise-output guidance and aligned generation/repair token budgets.
+- Replaced the short output budget with configurable larger generation/repair budgets and added automatic retry for unbalanced delimiters.
+- Updated the system prompt to prefer complete, small, simple Java examples without unnecessary complexity.
 
 ## 01-10-2026
 
@@ -13,10 +41,6 @@ All notable changes to Java Code Agent are documented here.
 - Documented configurable `JAVAC_PATH` and no-administrator compiler setup.
 - Added automatic creation of the configured compiler scratch directory.
 - Added Anthropic client reuse in Streamlit.
-- Added non-blocking startup warm-up for tokenizer, Anthropic client, and enabled local guardrail models.
-- Added explicit concise-output guidance and aligned generation/repair token budgets.
-- Replaced the short output budget with configurable larger generation/repair budgets and added automatic retry for unbalanced delimiters.
-- Updated the system prompt to prefer complete, small, simple Java examples without unnecessary complexity.
 
 ## 01-10-2026
 
