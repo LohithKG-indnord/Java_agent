@@ -13,6 +13,14 @@ All notable changes to the Java and Node.js Code Agent are documented here.
 
 ## 13-10-2026
 
+**commit:** `feat: added node_agent file`
+
+### Added
+
+- Added a nodejs agent along with java agent.
+
+## 13-10-2026
+
 **commit:** `feat: created a agent common file`
 
 ### Added
