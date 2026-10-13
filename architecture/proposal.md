@@ -1,29 +1,29 @@
-# Proposal: Java Code Agent
+# Proposal: Java and Node.js Code Agent
 
 ## 1. Summary
 
-Java Code Agent is a Streamlit-based coding assistant for focused Java programming questions. It uses Claude to generate Java source code, while local guardrails control what enters and leaves the model boundary.
+Java and Node.js Code Agent is a Streamlit-based coding assistant for focused programming questions. It uses Claude to generate source code for the selected language, while shared local guardrails control what enters and leaves the model boundary.
 
 The proposed system prioritizes predictable behavior over open-ended chat:
 
-- accept Java-related programming requests;
+- accept Java- or Node.js-related programming requests;
 - reject unrelated, unsafe, oversized, or prompt-injection requests before an API call;
-- generate source code only through a constrained Claude prompt;
-- validate the returned source structurally and, by default, with `javac`;
+- generate source code only through a constrained Claude prompt for the selected language;
+- validate the returned source structurally and, by default, with `javac` or `node --check`;
 - make one repair attempt only when the generated response fails a retryable validation check.
 
 ## 2. Problem statement
 
-General-purpose coding assistants can return explanations, mixed-language snippets, or code that does not compile. They may also spend API tokens processing requests that are outside the intended Java scope.
+General-purpose coding assistants can return explanations, mixed-language snippets, or code that does not compile. They may also spend API tokens processing requests that are outside the intended language scope.
 
-This project addresses those risks with a narrow request contract and a fail-closed validation pipeline. The application is intended for small, self-contained Java examples rather than unrestricted software generation or production code execution.
+This project addresses those risks with a narrow request contract and a fail-closed validation pipeline. The application is intended for small, self-contained Java or Node.js examples rather than unrestricted software generation or production code execution.
 
 ## 3. Goals
 
-- Provide a simple browser-based Java coding assistant.
+- Provide a simple browser-based Java and Node.js coding assistant.
 - Keep obvious invalid or unsafe requests local and inexpensive to reject.
-- Return Java source code rather than explanatory prose.
-- Require Java 17-compatible compilation by default.
+- Return source code for the selected language rather than explanatory prose.
+- Require Java 17-compatible compilation or Node.js syntax validation by default.
 - Preserve useful diagnostics without logging API keys, full prompts, or generated source.
 - Record request-stage latency for operational analysis.
 - Show separate local token counts for the system prompt, user prompt, and generated response without exposing API cost.
@@ -32,7 +32,7 @@ This project addresses those risks with a narrow request contract and a fail-clo
 ## 4. Non-goals
 
 - Executing generated Java code.
-- Accepting arbitrary programming languages.
+- Accepting arbitrary programming languages beyond the supported Java and Node.js routes.
 - Building a general-purpose conversational assistant.
 - Guaranteeing that generated code is secure for production deployment.
 - Replacing code review, tests, dependency scanning, or runtime sandboxing.
@@ -50,11 +50,11 @@ flowchart TD
     E -->|No| G[Claude API]
     F -->|Rejected or unavailable in strict mode| D
     F -->|Accepted| G
-    G --> H[Extract Java source]
+    G --> H[Extract selected-language source]
     H --> I[Output guardrail]
     I --> J[Structure and content checks]
-    J --> K[javac --release 17 validation]
-    K -->|Pass| L[Display Java source]
+    J --> K[Selected language validation]
+    K -->|Pass| L[Display source]
     K -->|Retryable failure| M[One repair request]
     M --> I
     K -->|Final failure| N[Show validation diagnostic]
@@ -62,13 +62,13 @@ flowchart TD
 
 ## 6. Security and safety strategy
 
-The input path rejects empty or oversized requests, obvious non-Java requests, prompt-injection patterns, unsafe credential-theft/malware requests, and unsupported control characters. The output path removes a complete Markdown fence, rejects prose and non-Java fragments, checks delimiters, blocks selected process-control APIs, and compiles the source in a temporary directory.
+The input path rejects empty or oversized requests, obvious out-of-scope requests, prompt-injection patterns, unsafe credential-theft/malware requests, and unsupported control characters. The output path removes a complete Markdown fence, rejects prose and non-language fragments, checks delimiters, blocks selected process-control APIs, and validates the selected source in a temporary directory.
 
 The application never executes the generated class. Compiler scratch files are cleaned up after validation, and a configured scratch directory is created automatically. Local model guardrails are optional at the architecture level but can be made mandatory with `REQUIRE_LOCAL_MODEL_GUARDRAILS=true`; if required models are unavailable, the request fails closed. Token counters use a configurable local `tiktoken` encoding and do not claim to represent provider billing totals.
 
 ## 7. Expected outcome
 
-The project should provide a small, reproducible Java assistant with a clear operational contract: accepted requests are Java-focused, successful responses are source-oriented, and the default path requires compiler acceptance before display.
+The project should provide a small, reproducible Java/Node.js assistant with a clear operational contract: accepted requests are focused on the selected language, successful responses are source-oriented, and the default path requires language-toolchain acceptance before display.
 
 ## 8. Future improvements
 
@@ -77,5 +77,4 @@ The project should provide a small, reproducible Java assistant with a clear ope
 - Add rate limiting and authentication before shared deployment.
 - Add stronger Java policy checks using an allowlist of permitted APIs.
 - Add a sandboxed compile service if generated code must be executed in a future product.
-- Separate UI, orchestration, guardrails, and provider integration into modules as the codebase grows.
-- Add a setup diagnostic that reports whether the configured `JAVAC_PATH` is accessible before a request is submitted.
+- Add a setup diagnostic that reports whether the configured `JAVAC_PATH`, `NODE_PATH`, and `NPM_PATH` are accessible before a request is submitted.

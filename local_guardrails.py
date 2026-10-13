@@ -1,7 +1,7 @@
 """Optional local model guardrails.
 
 These models run before Claude and do not consume Anthropic tokens:
-* Sentence Transformers: semantic Java-scope classifier using calibrated prototypes.
+* Sentence Transformers: semantic Java/Node.js-scope classifier using calibrated prototypes.
 * Meta Prompt Guard: local prompt-injection/jailbreak classifier.
 
 The application can be configured to fail closed when these models are unavailable.
@@ -27,10 +27,32 @@ JAVA_PROTOTYPES = [
     "Implement a backend service, controller, or JSON validation endpoint.",
 ]
 
+NODE_PROTOTYPES = [
+    "Write a Node.js HTTP server using the built-in http module.",
+    "Create an Express or Fastify route with request validation.",
+    "Build a Node.js command-line program using npm packages.",
+    "Use CommonJS require and module.exports in a Node.js application.",
+    "Use ESM import and export in a Node.js application.",
+    "Implement asynchronous Node.js code with promises and async functions.",
+    "Read and write files safely using Node.js built-in modules.",
+    "Create a Node.js backend service that handles JSON requests.",
+    "Debug a Node.js runtime error or npm dependency issue.",
+    "Implement a Node.js stream, event emitter, or worker example.",
+]
+
 NON_JAVA_PROTOTYPES = [
     "Write a Python web scraper or Django application.",
     "Create a JavaScript, TypeScript, or Node.js application.",
     "Build a React frontend using HTML and CSS.",
+    "Write a C++, C#, Rust, Go, PHP, Ruby, or Kotlin program.",
+    "Explain finance, travel, weather, cooking, or general knowledge.",
+    "Write a shell script or PowerShell command.",
+]
+
+NON_NODE_PROTOTYPES = [
+    "Write Java code using classes, inheritance, and the JVM.",
+    "Create a Python web scraper or Django application.",
+    "Build a React frontend using browser APIs, HTML, and CSS.",
     "Write a C++, C#, Rust, Go, PHP, Ruby, or Kotlin program.",
     "Explain finance, travel, weather, cooking, or general knowledge.",
     "Write a shell script or PowerShell command.",
@@ -42,19 +64,36 @@ class LocalGuardrailUnavailable(RuntimeError):
 
 
 @lru_cache(maxsize=1)
-def _load_semantic_model() -> tuple[Any, Any, Any]:
+def _load_semantic_resources() -> tuple[Any, Any, Any, Any, Any]:
     try:
         import numpy as np
         from sentence_transformers import SentenceTransformer
     except ImportError as error:
         raise LocalGuardrailUnavailable(
-            "Install sentence-transformers to enable the local semantic Java guardrail."
+            "Install sentence-transformers to enable local semantic language guardrails."
         ) from error
-    model_name = os.getenv("JAVA_SCOPE_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+    model_name = os.getenv(
+        "SCOPE_MODEL",
+        os.getenv("JAVA_SCOPE_MODEL", "sentence-transformers/all-MiniLM-L6-v2"),
+    )
     model = SentenceTransformer(model_name)
     java_embeddings = model.encode(JAVA_PROTOTYPES, normalize_embeddings=True, convert_to_numpy=True)
     non_java_embeddings = model.encode(NON_JAVA_PROTOTYPES, normalize_embeddings=True, convert_to_numpy=True)
-    return model, np.asarray(java_embeddings), np.asarray(non_java_embeddings)
+    node_embeddings = model.encode(NODE_PROTOTYPES, normalize_embeddings=True, convert_to_numpy=True)
+    non_node_embeddings = model.encode(NON_NODE_PROTOTYPES, normalize_embeddings=True, convert_to_numpy=True)
+    return (
+        model,
+        np.asarray(java_embeddings),
+        np.asarray(non_java_embeddings),
+        np.asarray(node_embeddings),
+        np.asarray(non_node_embeddings),
+    )
+
+
+def _load_semantic_model() -> tuple[Any, Any, Any]:
+    """Backward-compatible Java semantic model accessor used by warm-up code."""
+    model, java_embeddings, non_java_embeddings, _, _ = _load_semantic_resources()
+    return model, java_embeddings, non_java_embeddings
 
 
 @lru_cache(maxsize=1)
@@ -85,6 +124,20 @@ def semantic_java_scope_check(text: str) -> tuple[bool, str]:
     return True, ""
 
 
+def semantic_node_scope_check(text: str) -> tuple[bool, str]:
+    """Accept only when Node.js similarity clears both score and margin thresholds."""
+    model, _, _, node_embeddings, non_node_embeddings = _load_semantic_resources()
+    query = model.encode([text], normalize_embeddings=True, convert_to_numpy=True)[0]
+    node_score = float((node_embeddings @ query).max())
+    non_node_score = float((non_node_embeddings @ query).max())
+    margin = node_score - non_node_score
+    min_score = float(os.getenv("NODE_SCOPE_MIN_SCORE", "0.55"))
+    min_margin = float(os.getenv("NODE_SCOPE_MIN_MARGIN", "0.06"))
+    if node_score < min_score or margin < min_margin:
+        return False, "The local semantic classifier could not verify that the request is Node.js-related."
+    return True, ""
+
+
 def prompt_injection_check(text: str) -> tuple[bool, str]:
     """Reject high-confidence injection/jailbreak classifications."""
     classifier = _load_prompt_guard()
@@ -112,11 +165,17 @@ def prompt_injection_check(text: str) -> tuple[bool, str]:
     return True, ""
 
 
-def check_local_models(text: str, require_semantic: bool = True) -> tuple[bool, str]:
-    """Run local classifiers; semantic scope is optional for clear Java input."""
+def check_local_models(
+    text: str,
+    require_semantic: bool = True,
+    language: str = "java",
+) -> tuple[bool, str]:
+    """Run shared injection checks and selected-language semantic scope checks."""
     allowed, reason = prompt_injection_check(text)
     if not allowed:
         return False, reason
     if not require_semantic:
         return True, ""
+    if language == "node":
+        return semantic_node_scope_check(text)
     return semantic_java_scope_check(text)

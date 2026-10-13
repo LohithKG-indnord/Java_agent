@@ -5,5 +5,8 @@ __pycache__/
 *.pyc
 .streamlit/secrets.toml
 .java_guardrail_*/
+.node_guardrail_*/
+.venv.broken*/
+.pytest_cache/
 agent.log
 latency_metrics.json

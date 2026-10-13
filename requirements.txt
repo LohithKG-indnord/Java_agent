@@ -7,3 +7,6 @@ sentence-transformers>=3.0.0,<6.0.0
 transformers>=4.45.0,<5.0.0
 # Test runner
 pytest>=8.0,<9.0
+
+# Node.js validation uses the installed Node.js runtime and npm; no npm package
+# is installed by this Python requirements file and generated code is never run.

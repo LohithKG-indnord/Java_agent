@@ -4,7 +4,9 @@ All notable changes to the Java and Node.js Code Agent are documented here.
 
 ## 13-10-2026
 
-**Changed**
+**commit:** `feat: created complete working agents`
+
+### Changed
 
 - Added a Java/Node.js language selector and routing layer.
 - Split language-specific generation and validation into the `agents/` package.
